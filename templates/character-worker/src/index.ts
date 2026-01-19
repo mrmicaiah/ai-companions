@@ -1,6 +1,6 @@
 // ============================================================
-// CHARACTER WORKER TEMPLATE - TELEGRAM VERSION
-// Replace all {{PLACEHOLDER}} values during character creation
+// CHARACTER WORKER - MULTI-USER TELEGRAM VERSION
+// One bot, thousands of users
 // ============================================================
 
 import { {{CHARACTER_CLASS}} } from './agent';
@@ -18,7 +18,6 @@ interface Env {
   CHARACTER: DurableObjectNamespace;
   ANTHROPIC_API_KEY: string;
   TELEGRAM_BOT_TOKEN: string;
-  TELEGRAM_CHAT_ID: string;  // Allowed chat ID (your personal chat with the bot)
 }
 
 interface TelegramUpdate {
@@ -28,6 +27,7 @@ interface TelegramUpdate {
     from: {
       id: number;
       first_name: string;
+      last_name?: string;
       username?: string;
     };
     chat: {
@@ -43,7 +43,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     
-    // Singleton Durable Object
+    // Singleton Durable Object (handles all users)
     const id = env.CHARACTER.idFromName('{{CHARACTER_NAME}}-v1');
     const character = env.CHARACTER.get(id);
 
@@ -58,7 +58,7 @@ export default {
       return new Response(`${VERSION.display_name} v${VERSION.version}`);
     }
 
-    // Telegram webhook
+    // Telegram webhook - handles ALL users
     if (url.pathname === '/telegram' && request.method === 'POST') {
       const update = await request.json() as TelegramUpdate;
       
@@ -69,28 +69,35 @@ export default {
       
       const chatId = update.message.chat.id.toString();
       const content = update.message.text;
-      
-      // Only respond to allowed chat ID
-      if (chatId !== env.TELEGRAM_CHAT_ID) {
-        console.log('Ignoring message from chat:', chatId);
-        return new Response('OK');
-      }
+      const user = update.message.from;
 
       // Send "typing" indicator
-      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendChatAction`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          action: 'typing'
+      ctx.waitUntil(
+        fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendChatAction`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            action: 'typing'
+          })
         })
-      });
+      );
 
+      // Forward to Durable Object with user info
       ctx.waitUntil(
         character.fetch(new Request('https://internal/message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content, chatId })
+          body: JSON.stringify({ 
+            content, 
+            chatId,
+            user: {
+              id: user.id,
+              firstName: user.first_name,
+              lastName: user.last_name,
+              username: user.username
+            }
+          })
         }))
       );
 
@@ -125,14 +132,9 @@ export default {
       });
     }
 
-    // Debug endpoints - forward to Durable Object
-    if (url.pathname.startsWith('/debug/')) {
-      return character.fetch(new Request(`https://internal${url.pathname}`));
-    }
-
-    // Memory endpoints
-    if (url.pathname.startsWith('/memory/')) {
-      return character.fetch(new Request(`https://internal${url.pathname}`));
+    // Admin/debug endpoints - forward to Durable Object
+    if (url.pathname.startsWith('/debug/') || url.pathname.startsWith('/admin/')) {
+      return character.fetch(request);
     }
 
     return new Response('Not found', { status: 404 });
@@ -148,10 +150,10 @@ export default {
     const TIMEZONE_OFFSET = {{TIMEZONE_OFFSET}}; // e.g., 5 for EST
     const localHour = (utcHour - TIMEZONE_OFFSET + 24) % 24;
 
-    // Proactive check during active hours
+    // Proactive outreach check during active hours
     if (localHour >= {{OUTREACH_START}} && localHour <= {{OUTREACH_END}}) {
       ctx.waitUntil(
-        character.fetch(new Request('https://internal/rhythm/checkGap'))
+        character.fetch(new Request('https://internal/rhythm/checkAllUsers'))
       );
     }
 
