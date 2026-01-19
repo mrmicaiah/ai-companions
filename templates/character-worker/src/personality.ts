@@ -1,7 +1,6 @@
 // ============================================================
 // PERSONALITY TEMPLATE
-// This entire file is REPLACED during character creation
-// with content from the Character Creation Kit
+// This file is REPLACED during character creation
 // ============================================================
 
 export const SYSTEM_PROMPT = `{{SYSTEM_PROMPT}}`;
@@ -12,6 +11,36 @@ export const CHARACTER_INFO = {
   relationship: '{{RELATIONSHIP}}',
   voice_formula: '{{VOICE_FORMULA}}'
 };
+
+export function getWelcomePrompt(userName: string, isFirstTime: boolean): string {
+  if (isFirstTime) {
+    return `
+## WELCOME NEW USER
+${userName} just clicked your link from the website. This is their FIRST time meeting you.
+Send a warm, intriguing opening message that:
+- Introduces yourself naturally (not formally)
+- Shows your personality immediately
+- Invites conversation without being pushy
+- Is 2-3 sentences max
+
+Do NOT:
+- Say "Welcome!" or sound like a customer service bot
+- Explain what you are or how this works
+- Be generic - be YOU
+`;
+  } else {
+    return `
+## RETURNING USER
+${userName} clicked your link again. You've talked before.
+Send a casual "hey, you're back" message that:
+- Acknowledges you know them
+- References something from past conversations if possible
+- Is warm but not over-the-top
+
+Keep it to 1-2 sentences.
+`;
+  }
+}
 
 export function getContextualPrompt(context: {
   currentTime: Date;
