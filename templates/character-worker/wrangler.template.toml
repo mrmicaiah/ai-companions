@@ -1,0 +1,26 @@
+name = "{{CHARACTER_NAME}}"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "MEMORY"
+bucket_name = "{{CHARACTER_NAME}}-memory"
+
+[[durable_objects.bindings]]
+name = "CHARACTER"
+class_name = "{{CHARACTER_CLASS}}"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["{{CHARACTER_CLASS}}"]
+
+[triggers]
+crons = ["0 * * * *"]
+
+# Secrets (set via wrangler secret put):
+# - ANTHROPIC_API_KEY
+# - SENDBLUE_API_KEY
+# - SENDBLUE_API_SECRET
+# - USER_PHONE
+# - CHARACTER_PHONE
