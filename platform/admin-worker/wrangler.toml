@@ -1,0 +1,14 @@
+name = "companions-admin"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "PLATFORM_BUCKET"
+bucket_name = "companions-platform"
+
+# Secrets (set via wrangler secret put):
+# - ADMIN_SECRET
+# - ANTHROPIC_API_KEY
+# - SENDBLUE_API_KEY
+# - SENDBLUE_API_SECRET
