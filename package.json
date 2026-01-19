@@ -1,9 +1,12 @@
 {
   "name": "ai-companions",
   "private": true,
-  "scripts": {
-    "deploy:sadie": "cd characters/sadie && npm install && npx wrangler deploy",
-    "deploy:sean": "cd characters/sean && npm install && npx wrangler deploy",
-    "deploy:clara": "cd characters/clara && npm install && npx wrangler deploy"
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241127.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^3.0.0"
   }
 }
