@@ -1,5 +1,5 @@
 // ============================================================
-// CHARACTER AGENT (Durable Object)
+// CHARACTER AGENT (Durable Object) - TELEGRAM VERSION
 // Handles conversation state, memory, and AI responses
 // ============================================================
 
@@ -9,10 +9,8 @@ import { SYSTEM_PROMPT, CHARACTER_INFO, getContextualPrompt } from './personalit
 interface Env {
   MEMORY: R2Bucket;
   ANTHROPIC_API_KEY: string;
-  SENDBLUE_API_KEY: string;
-  SENDBLUE_API_SECRET: string;
-  USER_PHONE: string;
-  CHARACTER_PHONE: string;
+  TELEGRAM_BOT_TOKEN: string;
+  TELEGRAM_CHAT_ID: string;
 }
 
 interface HotMemory {
@@ -76,8 +74,8 @@ export class {{CHARACTER_CLASS}} {
     try {
       // Handle incoming message
       if (url.pathname === '/message' && request.method === 'POST') {
-        const { content } = await request.json() as { content: string };
-        await this.handleMessage(content);
+        const { content, chatId } = await request.json() as { content: string; chatId: string };
+        await this.handleMessage(content, chatId);
         return new Response('OK');
       }
       
@@ -133,7 +131,7 @@ export class {{CHARACTER_CLASS}} {
     }
   }
 
-  private async handleMessage(content: string): Promise<void> {
+  private async handleMessage(content: string, chatId: string): Promise<void> {
     const now = new Date();
     const hot = await this.getHotMemory();
     
@@ -207,8 +205,8 @@ export class {{CHARACTER_CLASS}} {
       UPDATE sessions SET message_count = message_count + 1 WHERE id = ?
     `, hot.current_session_id);
     
-    // Send response via SendBlue
-    await this.sendMessage(response);
+    // Send response via Telegram
+    await this.sendMessage(response, chatId);
   }
 
   private async generateResponse(hot: HotMemory): Promise<string> {
@@ -251,23 +249,38 @@ export class {{CHARACTER_CLASS}} {
     return textBlock?.text || "...";
   }
 
-  private async sendMessage(content: string): Promise<void> {
-    const response = await fetch('https://api.sendblue.co/api/send-message', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'sb-api-key-id': this.env.SENDBLUE_API_KEY,
-        'sb-api-secret-key': this.env.SENDBLUE_API_SECRET
-      },
-      body: JSON.stringify({
-        number: this.env.USER_PHONE,
-        content,
-        from_number: this.env.CHARACTER_PHONE
-      })
-    });
+  private async sendMessage(content: string, chatId: string): Promise<void> {
+    const response = await fetch(
+      `https://api.telegram.org/bot${this.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: content,
+          parse_mode: 'Markdown'
+        })
+      }
+    );
     
     if (!response.ok) {
-      console.error('SendBlue error:', await response.text());
+      const error = await response.text();
+      console.error('Telegram error:', error);
+      
+      // Retry without Markdown if it failed (in case of formatting issues)
+      if (error.includes('parse')) {
+        await fetch(
+          `https://api.telegram.org/bot${this.env.TELEGRAM_BOT_TOKEN}/sendMessage`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: content
+            })
+          }
+        );
+      }
     }
   }
 
@@ -302,7 +315,7 @@ export class {{CHARACTER_CLASS}} {
       
       const textBlock = response.content.find(b => b.type === 'text');
       if (textBlock?.text) {
-        await this.sendMessage(textBlock.text);
+        await this.sendMessage(textBlock.text, this.env.TELEGRAM_CHAT_ID);
         
         // Mark that we reached out
         hot.last_message_at = new Date().toISOString();
