@@ -1,0 +1,43 @@
+name: Deploy Character
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'characters/**'
+  workflow_dispatch:
+    inputs:
+      character:
+        description: 'Character name to deploy'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Determine character
+        id: char
+        run: |
+          if [ "${{ github.event.inputs.character }}" != "" ]; then
+            echo "name=${{ github.event.inputs.character }}" >> $GITHUB_OUTPUT
+          else
+            CHANGED=$(git diff --name-only HEAD~1 | grep "^characters/" | head -1 | cut -d'/' -f2)
+            echo "name=$CHANGED" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Install dependencies
+        working-directory: characters/${{ steps.char.outputs.name }}
+        run: npm install
+        
+      - name: Deploy Character Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          workingDirectory: characters/${{ steps.char.outputs.name }}
