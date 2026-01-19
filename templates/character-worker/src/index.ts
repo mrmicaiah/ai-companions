@@ -1,5 +1,5 @@
 // ============================================================
-// CHARACTER WORKER TEMPLATE
+// CHARACTER WORKER TEMPLATE - TELEGRAM VERSION
 // Replace all {{PLACEHOLDER}} values during character creation
 // ============================================================
 
@@ -17,10 +17,26 @@ interface Env {
   MEMORY: R2Bucket;
   CHARACTER: DurableObjectNamespace;
   ANTHROPIC_API_KEY: string;
-  SENDBLUE_API_KEY: string;
-  SENDBLUE_API_SECRET: string;
-  USER_PHONE: string;
-  CHARACTER_PHONE: string;
+  TELEGRAM_BOT_TOKEN: string;
+  TELEGRAM_CHAT_ID: string;  // Allowed chat ID (your personal chat with the bot)
+}
+
+interface TelegramUpdate {
+  update_id: number;
+  message?: {
+    message_id: number;
+    from: {
+      id: number;
+      first_name: string;
+      username?: string;
+    };
+    chat: {
+      id: number;
+      type: string;
+    };
+    date: number;
+    text?: string;
+  };
 }
 
 export default {
@@ -42,32 +58,71 @@ export default {
       return new Response(`${VERSION.display_name} v${VERSION.version}`);
     }
 
-    // SendBlue webhook
-    if (url.pathname === '/imessage' && request.method === 'POST') {
-      const data = await request.json() as any;
-      const from = data.from_number || data.number;
-      const content = data.content || data.message || data.text;
-
-      if (from !== env.USER_PHONE) {
-        console.log('Ignoring message from:', from);
+    // Telegram webhook
+    if (url.pathname === '/telegram' && request.method === 'POST') {
+      const update = await request.json() as TelegramUpdate;
+      
+      // Only process text messages
+      if (!update.message?.text) {
         return new Response('OK');
       }
+      
+      const chatId = update.message.chat.id.toString();
+      const content = update.message.text;
+      
+      // Only respond to allowed chat ID
+      if (chatId !== env.TELEGRAM_CHAT_ID) {
+        console.log('Ignoring message from chat:', chatId);
+        return new Response('OK');
+      }
+
+      // Send "typing" indicator
+      await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendChatAction`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          action: 'typing'
+        })
+      });
 
       ctx.waitUntil(
         character.fetch(new Request('https://internal/message', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content })
+          body: JSON.stringify({ content, chatId })
         }))
       );
 
       return new Response('OK');
     }
 
-    // WhatsApp webhook (if using)
-    if (url.pathname === '/whatsapp' && request.method === 'POST') {
-      // Similar handling for WhatsApp
-      return new Response('OK');
+    // Setup webhook helper
+    if (url.pathname === '/setup-webhook' && request.method === 'POST') {
+      const webhookUrl = `${url.origin}/telegram`;
+      const response = await fetch(
+        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/setWebhook`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: webhookUrl })
+        }
+      );
+      const result = await response.json();
+      return new Response(JSON.stringify(result, null, 2), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Get webhook info
+    if (url.pathname === '/webhook-info') {
+      const response = await fetch(
+        `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getWebhookInfo`
+      );
+      const result = await response.json();
+      return new Response(JSON.stringify(result, null, 2), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
     // Debug endpoints - forward to Durable Object
