@@ -21,4 +21,3 @@ crons = ["0 * * * *"]
 # Secrets (set via Cloudflare dashboard):
 # - ANTHROPIC_API_KEY
 # - TELEGRAM_BOT_TOKEN
-# - TELEGRAM_CHAT_ID (your personal chat ID with the bot)
