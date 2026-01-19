@@ -71,6 +71,18 @@ export default {
       const content = update.message.text;
       const user = update.message.from;
 
+      // Check for /start command (new user from website link)
+      const isStartCommand = content.startsWith('/start');
+      let refCode: string | null = null;
+      
+      if (isStartCommand) {
+        // Extract ref code if present: /start ref123 → ref123
+        const parts = content.split(' ');
+        if (parts.length > 1) {
+          refCode = parts[1];
+        }
+      }
+
       // Send "typing" indicator
       ctx.waitUntil(
         fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendChatAction`, {
@@ -89,14 +101,16 @@ export default {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            content, 
+            content: isStartCommand ? '__START__' : content, 
             chatId,
             user: {
               id: user.id,
               firstName: user.first_name,
               lastName: user.last_name,
               username: user.username
-            }
+            },
+            refCode,
+            isNewUser: isStartCommand
           })
         }))
       );
