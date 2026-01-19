@@ -4,7 +4,7 @@
 // ============================================================
 
 import Anthropic from '@anthropic-ai/sdk';
-import { SYSTEM_PROMPT, CHARACTER_INFO, getContextualPrompt } from './personality';
+import { SYSTEM_PROMPT, CHARACTER_INFO, getContextualPrompt, getWelcomePrompt } from './personality';
 
 interface Env {
   MEMORY: R2Bucket;
@@ -28,6 +28,7 @@ interface User {
   last_message_at: string;
   last_outreach_at?: string;
   timezone_offset?: number;
+  ref_code?: string;
 }
 
 interface Session {
@@ -69,7 +70,8 @@ export class {{CHARACTER_CLASS}} {
         created_at TEXT,
         last_message_at TEXT,
         last_outreach_at TEXT,
-        timezone_offset INTEGER
+        timezone_offset INTEGER,
+        ref_code TEXT
       );
       
       -- Messages table (per user)
@@ -92,8 +94,6 @@ export class {{CHARACTER_CLASS}} {
         message_count INTEGER DEFAULT 0
       );
       
-      -- Hot memory per user (stored in R2, keyed by chat_id)
-      
       CREATE INDEX IF NOT EXISTS idx_messages_chat ON messages(chat_id);
       CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_chat ON sessions(chat_id);
@@ -111,12 +111,9 @@ export class {{CHARACTER_CLASS}} {
         const data = await request.json() as {
           content: string;
           chatId: string;
-          user: {
-            id: number;
-            firstName: string;
-            lastName?: string;
-            username?: string;
-          };
+          user: { id: number; firstName: string; lastName?: string; username?: string };
+          refCode?: string;
+          isNewUser?: boolean;
         };
         await this.handleMessage(data);
         return new Response('OK');
@@ -136,7 +133,6 @@ export class {{CHARACTER_CLASS}} {
       
       // === Admin/Debug Endpoints ===
       
-      // Get all users
       if (url.pathname === '/admin/users') {
         const users = this.sql.exec(`
           SELECT * FROM users ORDER BY last_message_at DESC LIMIT 100
@@ -144,7 +140,6 @@ export class {{CHARACTER_CLASS}} {
         return this.jsonResponse({ users, count: users.length });
       }
       
-      // Get user by chat_id
       if (url.pathname.startsWith('/admin/users/')) {
         const chatId = url.pathname.split('/').pop();
         const user = this.sql.exec(`SELECT * FROM users WHERE chat_id = ?`, chatId).one();
@@ -161,7 +156,6 @@ export class {{CHARACTER_CLASS}} {
         return this.jsonResponse({ user, sessions, recentMessages });
       }
       
-      // Stats
       if (url.pathname === '/debug/stats') {
         const userCount = this.sql.exec(`SELECT COUNT(*) as count FROM users`).one();
         const messageCount = this.sql.exec(`SELECT COUNT(*) as count FROM messages`).one();
@@ -189,22 +183,31 @@ export class {{CHARACTER_CLASS}} {
     content: string;
     chatId: string;
     user: { id: number; firstName: string; lastName?: string; username?: string };
+    refCode?: string;
+    isNewUser?: boolean;
   }): Promise<void> {
-    const { content, chatId, user: telegramUser } = data;
+    const { content, chatId, user: telegramUser, refCode, isNewUser } = data;
     const now = new Date();
     
     // Get or create user
     let user = this.sql.exec(`SELECT * FROM users WHERE chat_id = ?`, chatId).one() as User | null;
+    const isFirstTimeUser = !user;
     
     if (!user) {
-      // New user
+      // New user from website
       this.sql.exec(`
-        INSERT INTO users (chat_id, telegram_id, first_name, last_name, username, status, created_at, last_message_at, trial_messages_remaining)
-        VALUES (?, ?, ?, ?, ?, 'trial', ?, ?, ?)
+        INSERT INTO users (chat_id, telegram_id, first_name, last_name, username, status, created_at, last_message_at, trial_messages_remaining, ref_code)
+        VALUES (?, ?, ?, ?, ?, 'trial', ?, ?, ?, ?)
       `, chatId, telegramUser.id, telegramUser.firstName, telegramUser.lastName || null, 
-         telegramUser.username || null, now.toISOString(), now.toISOString(), TRIAL_MESSAGE_LIMIT);
+         telegramUser.username || null, now.toISOString(), now.toISOString(), TRIAL_MESSAGE_LIMIT, refCode || null);
       
       user = this.sql.exec(`SELECT * FROM users WHERE chat_id = ?`, chatId).one() as User;
+    }
+    
+    // Handle /start command - send welcome message
+    if (content === '__START__') {
+      await this.sendWelcomeMessage(user, isFirstTimeUser);
+      return;
     }
     
     // Check trial status
@@ -226,12 +229,10 @@ export class {{CHARACTER_CLASS}} {
     let sessionId: string;
     
     if (needsNewSession) {
-      // Close previous session
       if (lastSession && !lastSession.ended_at) {
         await this.closeSession(lastSession.id, chatId);
       }
       
-      // Create new session
       sessionId = `${chatId}_${Date.now()}`;
       this.sql.exec(`
         INSERT INTO sessions (id, chat_id, started_at, message_count)
@@ -275,17 +276,33 @@ export class {{CHARACTER_CLASS}} {
     this.updateUserStatus(chatId);
   }
 
+  private async sendWelcomeMessage(user: User, isFirstTime: boolean): Promise<void> {
+    const anthropic = new Anthropic({ apiKey: this.env.ANTHROPIC_API_KEY });
+    
+    const welcomePrompt = getWelcomePrompt(user.first_name, isFirstTime);
+    
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 300,
+      system: SYSTEM_PROMPT + `\n\n${welcomePrompt}`,
+      messages: [{ role: 'user', content: '[SYSTEM: User just clicked to chat from the website. Send your opening message.]' }]
+    });
+    
+    const textBlock = response.content.find(b => b.type === 'text');
+    if (textBlock?.text) {
+      await this.sendMessage(user.chat_id, textBlock.text);
+    }
+  }
+
   private async generateResponse(chatId: string, sessionId: string, user: User): Promise<string> {
     const anthropic = new Anthropic({ apiKey: this.env.ANTHROPIC_API_KEY });
     
-    // Get recent messages for this user
     const recentMessages = this.sql.exec(`
       SELECT role, content FROM messages 
       WHERE chat_id = ? 
       ORDER BY timestamp DESC LIMIT 20
     `, chatId).toArray().reverse();
     
-    // Get previous session summaries
     const previousSessions = this.sql.exec(`
       SELECT * FROM sessions 
       WHERE chat_id = ? AND id != ? AND summary IS NOT NULL
@@ -296,7 +313,6 @@ export class {{CHARACTER_CLASS}} {
       `- ${s.started_at}: ${s.summary}`
     ).join('\n');
     
-    // Build context
     const contextPrompt = getContextualPrompt({
       currentTime: new Date(),
       isNewSession: recentMessages.length <= 2,
@@ -304,7 +320,6 @@ export class {{CHARACTER_CLASS}} {
       sessionList: sessionList || undefined
     });
     
-    // Add user context
     const userContext = `\n## USER INFO\nName: ${user.first_name}${user.last_name ? ' ' + user.last_name : ''}\nMessages exchanged: ${user.message_count}\n`;
     
     const systemPrompt = SYSTEM_PROMPT + userContext + contextPrompt;
@@ -349,12 +364,10 @@ export class {{CHARACTER_CLASS}} {
     
     let newStatus = user.status;
     
-    // Trial → Hooked (after 10 messages)
     if (user.status === 'trial' && user.message_count >= 10) {
       newStatus = 'hooked';
     }
     
-    // Update if changed
     if (newStatus !== user.status) {
       this.sql.exec(`UPDATE users SET status = ? WHERE chat_id = ?`, newStatus, chatId);
     }
@@ -373,7 +386,6 @@ export class {{CHARACTER_CLASS}} {
       return;
     }
     
-    // Generate summary
     const anthropic = new Anthropic({ apiKey: this.env.ANTHROPIC_API_KEY });
     
     const conversationText = messages.map(m => 
@@ -397,7 +409,6 @@ export class {{CHARACTER_CLASS}} {
   }
 
   private async checkAllUsersForOutreach(): Promise<void> {
-    // Find users who haven't been messaged in 24-48 hours
     const cutoffStart = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
     const cutoffEnd = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     
@@ -416,7 +427,6 @@ export class {{CHARACTER_CLASS}} {
   }
 
   private async sendProactiveMessage(user: User): Promise<void> {
-    // Get last session for context
     const lastSession = this.sql.exec(`
       SELECT * FROM sessions WHERE chat_id = ? AND summary IS NOT NULL
       ORDER BY started_at DESC LIMIT 1
@@ -439,7 +449,6 @@ export class {{CHARACTER_CLASS}} {
     if (textBlock?.text) {
       await this.sendMessage(user.chat_id, textBlock.text);
       
-      // Update outreach timestamp
       this.sql.exec(`
         UPDATE users SET last_outreach_at = ? WHERE chat_id = ?
       `, new Date().toISOString(), user.chat_id);
@@ -449,7 +458,6 @@ export class {{CHARACTER_CLASS}} {
   private async cleanup(): Promise<void> {
     const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     
-    // Archive old sessions to R2
     const oldSessions = this.sql.exec(`
       SELECT * FROM sessions WHERE ended_at < ?
     `, cutoff).toArray();
@@ -464,7 +472,6 @@ export class {{CHARACTER_CLASS}} {
       }
     }
     
-    // Mark inactive users as paused (no activity in 14 days)
     const pauseCutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
     this.sql.exec(`
       UPDATE users SET status = 'paused' 
@@ -472,7 +479,6 @@ export class {{CHARACTER_CLASS}} {
       AND last_message_at < ?
     `, pauseCutoff);
     
-    // Mark paused users as churned (no activity in 30 days)
     this.sql.exec(`
       UPDATE users SET status = 'churned' 
       WHERE status = 'paused' 
