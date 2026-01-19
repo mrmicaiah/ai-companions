@@ -1,0 +1,19 @@
+name = "clara"
+main = "characters/clara/src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "MEMORY"
+bucket_name = "clara-memory"
+
+[[durable_objects.bindings]]
+name = "CHARACTER"
+class_name = "ClaraAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ClaraAgent"]
+
+[triggers]
+crons = ["0 * * * *"]
