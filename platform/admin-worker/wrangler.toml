@@ -7,8 +7,6 @@ compatibility_flags = ["nodejs_compat"]
 binding = "PLATFORM_BUCKET"
 bucket_name = "companions-platform"
 
-# Secrets (set via wrangler secret put):
+# Secrets (set via Cloudflare dashboard):
 # - ADMIN_SECRET
 # - ANTHROPIC_API_KEY
-# - SENDBLUE_API_KEY
-# - SENDBLUE_API_SECRET
