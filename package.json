@@ -1,0 +1,9 @@
+{
+  "name": "ai-companions",
+  "private": true,
+  "scripts": {
+    "deploy:sadie": "cd characters/sadie && npm install && npx wrangler deploy",
+    "deploy:sean": "cd characters/sean && npm install && npx wrangler deploy",
+    "deploy:clara": "cd characters/clara && npm install && npx wrangler deploy"
+  }
+}
