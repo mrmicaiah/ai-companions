@@ -18,9 +18,7 @@ new_sqlite_classes = ["{{CHARACTER_CLASS}}"]
 [triggers]
 crons = ["0 * * * *"]
 
-# Secrets (set via wrangler secret put):
+# Secrets (set via Cloudflare dashboard):
 # - ANTHROPIC_API_KEY
-# - SENDBLUE_API_KEY
-# - SENDBLUE_API_SECRET
-# - USER_PHONE
-# - CHARACTER_PHONE
+# - TELEGRAM_BOT_TOKEN
+# - TELEGRAM_CHAT_ID (your personal chat ID with the bot)
