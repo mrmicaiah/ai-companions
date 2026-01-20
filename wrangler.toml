@@ -1,19 +1,8 @@
-name = "sadie"
-main = "characters/sadie/src/index.ts"
+name = "companions-admin"
+main = "platform/admin-worker/src/index.ts"
 compatibility_date = "2024-12-01"
 compatibility_flags = ["nodejs_compat"]
 
 [[r2_buckets]]
-binding = "MEMORY"
-bucket_name = "sadie-memory"
-
-[[durable_objects.bindings]]
-name = "CHARACTER"
-class_name = "SadieAgent"
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["SadieAgent"]
-
-[triggers]
-crons = ["0 * * * *"]
+binding = "PLATFORM_BUCKET"
+bucket_name = "companions-platform"
