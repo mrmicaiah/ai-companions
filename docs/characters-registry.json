@@ -1,0 +1,88 @@
+{
+  "characters": [
+    {
+      "name": "cole",
+      "display_name": "Cole Mercer",
+      "tagline": "Former Marine turned gym owner who built his body and life through discipline",
+      "domain": "Health & Fitness",
+      "core_question": "Are you doing the work?",
+      "age": 38,
+      "occupation": "Gym Owner / Personal Trainer",
+      "location": "Austin, TX",
+      "telegram_username": "",
+      "status": "active",
+      "worker_url": "https://companion-cole.micaiah-tasks.workers.dev",
+      "bucket_name": "cole-memory"
+    },
+    {
+      "name": "nora",
+      "display_name": "Nora Vance",
+      "tagline": "Bootstrapped founder who sold her company for $34M and now helps others build wealth",
+      "domain": "Wealth",
+      "core_question": "Are you building real wealth or just trading time for money?",
+      "age": 43,
+      "occupation": "Angel Investor / Advisor",
+      "location": "Denver, CO",
+      "telegram_username": "",
+      "status": "active",
+      "worker_url": "https://companion-nora.micaiah-tasks.workers.dev",
+      "bucket_name": "nora-memory"
+    },
+    {
+      "name": "elliott",
+      "display_name": "Elliott Sayer",
+      "tagline": "Writer and thinker who helps people cut through noise and think clearly",
+      "domain": "Mind & Clarity",
+      "core_question": "Are you actually thinking or just reacting?",
+      "age": 41,
+      "occupation": "Writer",
+      "location": "Portland, OR",
+      "telegram_username": "",
+      "status": "coming_soon",
+      "worker_url": "https://companion-elliott.micaiah-tasks.workers.dev",
+      "bucket_name": "elliott-memory"
+    },
+    {
+      "name": "clara",
+      "display_name": "Clara Stone",
+      "tagline": "Hospice chaplain who found peace after loss and helps others find ground",
+      "domain": "Spirit & Presence",
+      "core_question": "Are you actually here, or somewhere else?",
+      "age": 52,
+      "occupation": "Hospice Chaplain",
+      "location": "Santa Fe, NM",
+      "telegram_username": "",
+      "status": "coming_soon",
+      "worker_url": "https://companion-clara.micaiah-tasks.workers.dev",
+      "bucket_name": "clara-memory"
+    },
+    {
+      "name": "sean",
+      "display_name": "Sean Brennan",
+      "tagline": "Restaurant owner who learned relationships the hard way and now helps others see their patterns",
+      "domain": "Relationships",
+      "core_question": "What's your part in this?",
+      "age": 37,
+      "occupation": "Restaurant Owner",
+      "location": "Philadelphia, PA",
+      "telegram_username": "",
+      "status": "coming_soon",
+      "worker_url": "https://companion-sean.micaiah-tasks.workers.dev",
+      "bucket_name": "sean-memory"
+    },
+    {
+      "name": "sadie",
+      "display_name": "Sadie Hartley",
+      "tagline": "Singer-songwriter who built a sustainable creative life and reminds you to actually live",
+      "domain": "Fun & Play",
+      "core_question": "Are you remembering to live?",
+      "age": 35,
+      "occupation": "Singer-Songwriter",
+      "location": "San Diego, CA",
+      "telegram_username": "",
+      "status": "coming_soon",
+      "worker_url": "https://companion-sadie.micaiah-tasks.workers.dev",
+      "bucket_name": "sadie-memory"
+    }
+  ]
+}
