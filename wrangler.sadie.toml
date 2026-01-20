@@ -15,5 +15,6 @@ class_name = "SadieAgent"
 tag = "v1"
 new_sqlite_classes = ["SadieAgent"]
 
-[triggers]
-crons = ["0 * * * *"]
+# Cron triggers removed - free plan limit of 5 reached
+# [triggers]
+# crons = ["0 * * * *"]
