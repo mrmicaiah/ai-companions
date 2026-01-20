@@ -1,0 +1,20 @@
+name = "elliott"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "MEMORY"
+bucket_name = "elliott-memory"
+
+[[durable_objects.bindings]]
+name = "CHARACTER"
+class_name = "ElliottAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ElliottAgent"]
+
+# Secrets (set via Cloudflare dashboard):
+# - ANTHROPIC_API_KEY
+# - TELEGRAM_BOT_TOKEN
