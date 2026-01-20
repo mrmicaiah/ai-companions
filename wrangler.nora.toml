@@ -1,0 +1,20 @@
+name = "nora"
+main = "characters/nora/src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "MEMORY"
+bucket_name = "nora-memory"
+
+[[durable_objects.bindings]]
+name = "CHARACTER"
+class_name = "NoraAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["NoraAgent"]
+
+# Secrets (set via Cloudflare dashboard):
+# - ANTHROPIC_API_KEY
+# - TELEGRAM_BOT_TOKEN
