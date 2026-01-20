@@ -1,5 +1,6 @@
 // ============================================================
 // COMPANIONS ADMIN - Central Management API
+// Version: 1.0.1 - Removed hono dependency
 // ============================================================
 
 interface Env {
@@ -71,7 +72,7 @@ export default {
       return jsonResponse({ 
         status: 'ok', 
         service: 'companions-admin',
-        version: '1.0.0',
+        version: '1.0.1',
         messaging: 'telegram'
       });
     }
