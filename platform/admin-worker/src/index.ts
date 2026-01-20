@@ -1,6 +1,6 @@
 // ============================================================
 // COMPANIONS ADMIN - Central Management API
-// Version: 1.0.1 - Removed hono dependency
+// Version: 2.0.0 - Website integration
 // ============================================================
 
 interface Env {
@@ -8,30 +8,32 @@ interface Env {
   ADMIN_SECRET: string;
 }
 
-interface CharacterRegistration {
+interface CharacterPublic {
   name: string;
   display_name: string;
-  tagline?: string;
-  telegram_bot_token: string;
-  telegram_chat_id: string;
+  tagline: string;
+  domain: string;
+  core_question: string;
+  age: number;
+  occupation: string;
+  location: string;
+  telegram_username: string;
+  telegram_link: string;
+  avatar_url?: string;
+  status: 'active' | 'paused' | 'coming_soon';
+}
+
+interface CharacterFull extends CharacterPublic {
   worker_url: string;
   bucket_name: string;
   created_at: string;
-  personality_summary?: string;
-}
-
-interface CharacterEntry {
-  name: string;
-  display_name: string;
-  created_at: string;
-  status: 'active' | 'paused' | 'archived';
-  telegram_bot_username: string;
-  worker_url: string;
-  tagline?: string;
+  updated_at: string;
+  telegram_bot_token?: string;
 }
 
 interface Registry {
-  characters: CharacterEntry[];
+  characters: CharacterFull[];
+  updated_at: string;
 }
 
 function jsonResponse(data: any, status = 200): Response {
@@ -40,7 +42,7 @@ function jsonResponse(data: any, status = 200): Response {
     headers: { 
       'Content-Type': 'application/json',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization'
     }
   });
@@ -49,6 +51,40 @@ function jsonResponse(data: any, status = 200): Response {
 function checkAuth(request: Request, env: Env): boolean {
   const auth = request.headers.get('Authorization');
   return auth === `Bearer ${env.ADMIN_SECRET}`;
+}
+
+// Strip sensitive fields for public API
+function toPublic(char: CharacterFull): CharacterPublic {
+  return {
+    name: char.name,
+    display_name: char.display_name,
+    tagline: char.tagline,
+    domain: char.domain,
+    core_question: char.core_question,
+    age: char.age,
+    occupation: char.occupation,
+    location: char.location,
+    telegram_username: char.telegram_username,
+    telegram_link: char.telegram_link,
+    avatar_url: char.avatar_url,
+    status: char.status
+  };
+}
+
+async function getRegistry(env: Env): Promise<Registry> {
+  const obj = await env.PLATFORM_BUCKET.get('registry/characters.json');
+  if (!obj) {
+    return { characters: [], updated_at: new Date().toISOString() };
+  }
+  return JSON.parse(await obj.text());
+}
+
+async function saveRegistry(env: Env, registry: Registry): Promise<void> {
+  registry.updated_at = new Date().toISOString();
+  await env.PLATFORM_BUCKET.put(
+    'registry/characters.json',
+    JSON.stringify(registry, null, 2)
+  );
 }
 
 export default {
@@ -61,139 +97,245 @@ export default {
       return new Response(null, {
         headers: {
           'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization'
         }
       });
     }
+
+    // ==================== PUBLIC ENDPOINTS ====================
 
     // Health check
     if (url.pathname === '/health') {
       return jsonResponse({ 
         status: 'ok', 
         service: 'companions-admin',
-        version: '1.0.1',
-        messaging: 'telegram'
+        version: '2.0.0'
       });
     }
 
-    // List all characters
-    if (url.pathname === '/characters' && method === 'GET') {
-      if (!checkAuth(request, env)) {
-        return jsonResponse({ error: 'Unauthorized' }, 401);
-      }
+    // PUBLIC: List all active characters (for website)
+    if (url.pathname === '/api/characters' && method === 'GET') {
+      const registry = await getRegistry(env);
+      const activeCharacters = registry.characters
+        .filter(c => c.status === 'active' || c.status === 'coming_soon')
+        .map(toPublic);
       
-      const registry = await env.PLATFORM_BUCKET.get('registry/characters.json');
-      if (!registry) {
-        return jsonResponse({ characters: [] });
-      }
-      
-      return jsonResponse(JSON.parse(await registry.text()));
+      return jsonResponse({ 
+        characters: activeCharacters,
+        count: activeCharacters.length
+      });
     }
 
-    // Get character details
-    if (url.pathname.startsWith('/characters/') && method === 'GET') {
-      if (!checkAuth(request, env)) {
-        return jsonResponse({ error: 'Unauthorized' }, 401);
-      }
-      
+    // PUBLIC: Get single character (for website)
+    if (url.pathname.match(/^\/api\/characters\/[a-z]+$/) && method === 'GET') {
       const name = url.pathname.split('/').pop();
-      const config = await env.PLATFORM_BUCKET.get(`characters/${name}/config.json`);
+      const registry = await getRegistry(env);
+      const char = registry.characters.find(c => c.name === name);
       
-      if (!config) {
+      if (!char || char.status === 'paused') {
         return jsonResponse({ error: 'Character not found' }, 404);
       }
       
-      return jsonResponse(JSON.parse(await config.text()));
+      return jsonResponse(toPublic(char));
     }
 
-    // Register new character
-    if (url.pathname === '/characters' && method === 'POST') {
+    // PUBLIC: Get characters by domain (for website filtering)
+    if (url.pathname === '/api/characters/by-domain' && method === 'GET') {
+      const domain = url.searchParams.get('domain');
+      const registry = await getRegistry(env);
+      
+      let characters = registry.characters.filter(c => c.status === 'active');
+      if (domain) {
+        characters = characters.filter(c => c.domain.toLowerCase() === domain.toLowerCase());
+      }
+      
+      return jsonResponse({ 
+        characters: characters.map(toPublic),
+        count: characters.length
+      });
+    }
+
+    // ==================== ADMIN ENDPOINTS ====================
+
+    // ADMIN: List all characters (including paused, full details)
+    if (url.pathname === '/admin/characters' && method === 'GET') {
       if (!checkAuth(request, env)) {
         return jsonResponse({ error: 'Unauthorized' }, 401);
       }
       
-      const data = await request.json() as CharacterRegistration;
-      
-      if (!data.name || !data.display_name || !data.worker_url) {
-        return jsonResponse({ error: 'Missing required fields: name, display_name, worker_url' }, 400);
+      const registry = await getRegistry(env);
+      return jsonResponse({ 
+        characters: registry.characters,
+        count: registry.characters.length,
+        updated_at: registry.updated_at
+      });
+    }
+
+    // ADMIN: Register or update character
+    if (url.pathname === '/admin/characters' && method === 'POST') {
+      if (!checkAuth(request, env)) {
+        return jsonResponse({ error: 'Unauthorized' }, 401);
       }
       
-      await env.PLATFORM_BUCKET.put(
-        `characters/${data.name}/config.json`,
-        JSON.stringify(data, null, 2)
-      );
+      const data = await request.json() as Partial<CharacterFull>;
       
-      const registryObj = await env.PLATFORM_BUCKET.get('registry/characters.json');
-      const registry: Registry = registryObj 
-        ? JSON.parse(await registryObj.text()) 
-        : { characters: [] };
+      if (!data.name || !data.display_name) {
+        return jsonResponse({ error: 'Missing required fields: name, display_name' }, 400);
+      }
+
+      const registry = await getRegistry(env);
+      const existingIndex = registry.characters.findIndex(c => c.name === data.name);
       
-      const existingIndex = registry.characters.findIndex(ch => ch.name === data.name);
-      const entry: CharacterEntry = {
+      const now = new Date().toISOString();
+      
+      const character: CharacterFull = {
         name: data.name,
         display_name: data.display_name,
-        created_at: data.created_at || new Date().toISOString(),
-        status: 'active',
-        telegram_bot_username: '',
-        worker_url: data.worker_url,
-        tagline: data.tagline
+        tagline: data.tagline || '',
+        domain: data.domain || '',
+        core_question: data.core_question || '',
+        age: data.age || 0,
+        occupation: data.occupation || '',
+        location: data.location || '',
+        telegram_username: data.telegram_username || '',
+        telegram_link: data.telegram_username ? `https://t.me/${data.telegram_username}` : '',
+        avatar_url: data.avatar_url,
+        status: data.status || 'coming_soon',
+        worker_url: data.worker_url || '',
+        bucket_name: data.bucket_name || `${data.name}-memory`,
+        telegram_bot_token: data.telegram_bot_token,
+        created_at: existingIndex >= 0 ? registry.characters[existingIndex].created_at : now,
+        updated_at: now
       };
-      
+
       if (existingIndex >= 0) {
-        registry.characters[existingIndex] = entry;
+        registry.characters[existingIndex] = character;
       } else {
-        registry.characters.push(entry);
+        registry.characters.push(character);
       }
+
+      await saveRegistry(env, registry);
       
-      await env.PLATFORM_BUCKET.put(
-        'registry/characters.json',
-        JSON.stringify(registry, null, 2)
-      );
-      
-      return jsonResponse({ success: true, character: data.name });
+      return jsonResponse({ 
+        success: true, 
+        character: toPublic(character),
+        action: existingIndex >= 0 ? 'updated' : 'created'
+      });
     }
 
-    // Update character status
-    if (url.pathname.startsWith('/characters/') && method === 'PATCH') {
+    // ADMIN: Update character status
+    if (url.pathname.match(/^\/admin\/characters\/[a-z]+$/) && method === 'PATCH') {
       if (!checkAuth(request, env)) {
         return jsonResponse({ error: 'Unauthorized' }, 401);
       }
       
       const name = url.pathname.split('/').pop();
-      const updates = await request.json() as Partial<CharacterEntry>;
+      const updates = await request.json() as Partial<CharacterFull>;
       
-      const configObj = await env.PLATFORM_BUCKET.get(`characters/${name}/config.json`);
-      if (!configObj) {
+      const registry = await getRegistry(env);
+      const idx = registry.characters.findIndex(c => c.name === name);
+      
+      if (idx < 0) {
         return jsonResponse({ error: 'Character not found' }, 404);
       }
+
+      // Update telegram_link if username changed
+      if (updates.telegram_username) {
+        updates.telegram_link = `https://t.me/${updates.telegram_username}`;
+      }
+
+      registry.characters[idx] = { 
+        ...registry.characters[idx], 
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
       
-      const config = JSON.parse(await configObj.text());
-      const updatedConfig = { ...config, ...updates };
+      await saveRegistry(env, registry);
       
-      await env.PLATFORM_BUCKET.put(
-        `characters/${name}/config.json`,
-        JSON.stringify(updatedConfig, null, 2)
-      );
-      
-      const registryObj = await env.PLATFORM_BUCKET.get('registry/characters.json');
-      if (registryObj) {
-        const registry: Registry = JSON.parse(await registryObj.text());
-        const idx = registry.characters.findIndex(ch => ch.name === name);
-        if (idx >= 0) {
-          registry.characters[idx] = { ...registry.characters[idx], ...updates };
-          await env.PLATFORM_BUCKET.put(
-            'registry/characters.json',
-            JSON.stringify(registry, null, 2)
-          );
-        }
+      return jsonResponse({ 
+        success: true, 
+        character: toPublic(registry.characters[idx])
+      });
+    }
+
+    // ADMIN: Delete character
+    if (url.pathname.match(/^\/admin\/characters\/[a-z]+$/) && method === 'DELETE') {
+      if (!checkAuth(request, env)) {
+        return jsonResponse({ error: 'Unauthorized' }, 401);
       }
       
-      return jsonResponse({ success: true, character: name });
+      const name = url.pathname.split('/').pop();
+      const registry = await getRegistry(env);
+      const idx = registry.characters.findIndex(c => c.name === name);
+      
+      if (idx < 0) {
+        return jsonResponse({ error: 'Character not found' }, 404);
+      }
+
+      registry.characters.splice(idx, 1);
+      await saveRegistry(env, registry);
+      
+      return jsonResponse({ success: true, deleted: name });
+    }
+
+    // ADMIN: Bulk register characters
+    if (url.pathname === '/admin/characters/bulk' && method === 'POST') {
+      if (!checkAuth(request, env)) {
+        return jsonResponse({ error: 'Unauthorized' }, 401);
+      }
+      
+      const { characters } = await request.json() as { characters: Partial<CharacterFull>[] };
+      
+      if (!characters || !Array.isArray(characters)) {
+        return jsonResponse({ error: 'Expected { characters: [...] }' }, 400);
+      }
+
+      const registry = await getRegistry(env);
+      const now = new Date().toISOString();
+      const results: { name: string; action: string }[] = [];
+
+      for (const data of characters) {
+        if (!data.name || !data.display_name) continue;
+
+        const existingIndex = registry.characters.findIndex(c => c.name === data.name);
+        
+        const character: CharacterFull = {
+          name: data.name,
+          display_name: data.display_name,
+          tagline: data.tagline || '',
+          domain: data.domain || '',
+          core_question: data.core_question || '',
+          age: data.age || 0,
+          occupation: data.occupation || '',
+          location: data.location || '',
+          telegram_username: data.telegram_username || '',
+          telegram_link: data.telegram_username ? `https://t.me/${data.telegram_username}` : '',
+          avatar_url: data.avatar_url,
+          status: data.status || 'coming_soon',
+          worker_url: data.worker_url || '',
+          bucket_name: data.bucket_name || `${data.name}-memory`,
+          telegram_bot_token: data.telegram_bot_token,
+          created_at: existingIndex >= 0 ? registry.characters[existingIndex].created_at : now,
+          updated_at: now
+        };
+
+        if (existingIndex >= 0) {
+          registry.characters[existingIndex] = character;
+          results.push({ name: data.name, action: 'updated' });
+        } else {
+          registry.characters.push(character);
+          results.push({ name: data.name, action: 'created' });
+        }
+      }
+
+      await saveRegistry(env, registry);
+      
+      return jsonResponse({ success: true, results });
     }
 
     // Debug: list bucket contents
-    if (url.pathname === '/debug/bucket' && method === 'GET') {
+    if (url.pathname === '/admin/debug/bucket' && method === 'GET') {
       if (!checkAuth(request, env)) {
         return jsonResponse({ error: 'Unauthorized' }, 401);
       }
