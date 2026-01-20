@@ -1,5 +1,6 @@
 // ============================================================
 // SADIE HARTLEY - Agent (Durable Object)
+// Version: 1.0.1 - Fixed SQL queries
 // ============================================================
 
 import Anthropic from '@anthropic-ai/sdk';
