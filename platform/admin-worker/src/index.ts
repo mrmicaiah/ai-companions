@@ -1,6 +1,6 @@
 // ============================================================
 // COMPANIONS ADMIN - Central Management API
-// Version: 2.0.0 - Website integration
+// Version: 2.0.1 - Debug auth
 // ============================================================
 
 interface Env {
@@ -110,7 +110,20 @@ export default {
       return jsonResponse({ 
         status: 'ok', 
         service: 'companions-admin',
-        version: '2.0.0'
+        version: '2.0.1'
+      });
+    }
+
+    // DEBUG: Check auth setup (temporary - remove after testing)
+    if (url.pathname === '/debug/auth') {
+      const auth = request.headers.get('Authorization');
+      const secretSet = !!env.ADMIN_SECRET;
+      const secretLength = env.ADMIN_SECRET?.length || 0;
+      return jsonResponse({
+        auth_header_received: auth ? `${auth.substring(0, 10)}...` : null,
+        secret_is_set: secretSet,
+        secret_length: secretLength,
+        would_match: auth === `Bearer ${env.ADMIN_SECRET}`
       });
     }
 
