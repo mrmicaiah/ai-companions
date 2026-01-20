@@ -15,5 +15,6 @@ class_name = "ClaraAgent"
 tag = "v1"
 new_sqlite_classes = ["ClaraAgent"]
 
-[triggers]
-crons = ["0 * * * *"]
+# Cron triggers removed - free plan limit
+# [triggers]
+# crons = ["0 * * * *"]
