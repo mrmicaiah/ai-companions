@@ -1,0 +1,20 @@
+name = "cole"
+main = "characters/cole/src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "MEMORY"
+bucket_name = "cole-memory"
+
+[[durable_objects.bindings]]
+name = "CHARACTER"
+class_name = "ColeAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ColeAgent"]
+
+# Secrets (set via Cloudflare dashboard):
+# - ANTHROPIC_API_KEY
+# - TELEGRAM_BOT_TOKEN
