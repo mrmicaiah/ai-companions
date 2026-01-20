@@ -15,5 +15,6 @@ class_name = "SeanAgent"
 tag = "v1"
 new_sqlite_classes = ["SeanAgent"]
 
-[triggers]
-crons = ["0 * * * *"]
+# Cron triggers removed - free plan limit
+# [triggers]
+# crons = ["0 * * * *"]
